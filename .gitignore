@@ -1,0 +1,41 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== 操作系统 =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ===== 数据集（太大，按需下载）=====
+src/tiny_ml_compiler/dataset/*.npy
+
+# ===== 编译器生成的权重数据文件（可重新生成，单文件 9.5MB 不入库）=====
+model/weights/weight.c
+model/weights/weight.h
+
+# ===== 第三方源码包 =====
+src/tiny_ml_compiler/networkop/keras2c-master.zip
+
+# ===== 日志与临时文件 =====
+*.log
+*.tmp
