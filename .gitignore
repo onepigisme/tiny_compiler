@@ -39,3 +39,16 @@ src/tiny_ml_compiler/networkop/keras2c-master.zip
 # ===== 日志与临时文件 =====
 *.log
 *.tmp
+
+# ===== C / C++ 构建产物 =====
+cpp_demo/**/build/
+*.o
+*.obj
+*.exe
+*.pdb
+
+# ===== 本地 Python 工具库（仅用于脚本）=====
+.pylibs/
+
+# ===== 个人简历（不入库）=====
+*简历*.docx

@@ -10,6 +10,7 @@
 - **Dropout 零拷贝传递**：推理阶段 Dropout 无操作，通过交换 `k2c_tensor` 结构体（指针+元数据）传递数据
 - **same padding 支持**：`k2c_conv2d` 不接收 padding，自动插入 `k2c_pad2d` 预处理
 - **PyQt5 图形界面**：可视化选择模型文件并触发转换
+- **C++17 推理框架参考实现**：以 NCNN/MNN 同款的工厂自注册模式实现算子注册表，含虚函数算子体系、双缓冲乒乓 Graph 与完整算子计算，可直接编译运行
 - **完整 keras2c 运行时**：内置 `networkop/` 下的 C 推理算子（Conv2D、Dense、MaxPooling、激活函数等）
 
 ## 编译流程
@@ -66,6 +67,12 @@ tiny_ml_compiler/
 │   │   └── main_ui.py         # PyQt5 转换界面
 │   ├── ir/  frontend/  optimizer/  backend/   # 通用编译器骨架（待接入）
 │   └── cli.py                 # 命令行入口
+├── cpp_demo/
+│   └── op_registry/           # C++17 推理框架参考实现（可独立编译）
+│       ├── include/tml/       #   tensor / layer / op_registry / graph
+│       ├── src/layers.cpp     #   5 个算子实现 + 静态自注册
+│       ├── main.cpp           #   可运行 demo（组网络→前向推理）
+│       └── CMakeLists.txt
 ├── model/
 │   ├── mnist_cnn.h5           # 训练好的 Keras 模型（测试集 99.04%）
 │   ├── mnist_cnn.tflite       # float32 TFLite
@@ -147,6 +154,23 @@ int forward(const k2c_tensor* input, k2c_tensor** output) {
     *output = &tb;
     return 0;
 }
+```
+
+## C++17 推理框架参考实现
+
+`cpp_demo/op_registry/` 用现代 C++ 重写了编译器的算子注册与推理执行核心，演示工业界推理框架（NCNN / MNN / TFLite）的标准设计模式：
+
+- **工厂 + 静态自注册**：`TML_REGISTER_LAYER("Conv2D", Conv2DLayer)` 一行完成注册，新增算子无需修改注册表（开闭原则）
+- **虚函数算子体系**：`Layer` 抽象基类 + Conv2D / MaxPooling2D / Dense / Flatten / Dropout 子类
+- **强类型层描述**：以 `LayerInfo` 结构体替代 Python 的 dict，编译期检查字段
+- **双缓冲乒乓 Graph**：与生成的 C `forward()` 同构，两块工作缓冲按层交替读写，Dropout 零开销跳过
+- **完整算子语义**：same/valid padding、空洞卷积、softmax 数值稳定、NHWC 布局
+
+```bash
+cd cpp_demo/op_registry
+cmake -B build && cmake --build build --config Release
+./build/tml_demo          # Windows: .\build\Release\tml_demo.exe
+# 或：g++ -std=c++17 -Iinclude main.cpp src/layers.cpp -o tml_demo
 ```
 
 ## 支持的算子
