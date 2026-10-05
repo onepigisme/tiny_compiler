@@ -1,0 +1,81 @@
+# 前端拓扑（逐算子，binding 顺序即拓扑序）
+
+idx  KIND   NAME                         OP                         SHAPE                DTYPE    INNER                  INPUTS
+-------------------------------------------------------------------------------------------------------------------------------
+  0  INPUT  serving_default_input_1:0    -                          (1,28,28,1)          int8     -                      -
+  1  OP     lv                           dequantize                 (1,28,28,1)          float32  -                      serving_default_input_1:0  (+2 const)
+  2  OP     lv1                          dequantize                 (3,3,1,32)           float32  -                      +3 const
+  3  OP     lv2                          conv2d                     (1,28,28,32)         float32  -                      lv, lv1
+  4  OP     lv3                          dequantize                 (32)                 float32  -                      +3 const
+  5  OP     lv4                          add                        (1,28,28,32)         float32  -                      lv2, lv3
+  6  OP     lv5                          quantize                   (1,28,28,32)         int8     -                      lv4  (+2 const)
+  7  OP     lv6                          clip                       (1,28,28,32)         int8     -                      lv5  (+2 const)
+  8  OP     lv7                          max_pool2d                 (1,14,14,32)         int8     -                      lv6
+  9  OP     lv8                          dequantize                 (1,14,14,32)         float32  -                      lv7  (+2 const)
+ 10  OP     lv9                          dequantize                 (3,3,32,64)          float32  -                      +3 const
+ 11  OP     lv10                         conv2d                     (1,14,14,64)         float32  -                      lv8, lv9
+ 12  OP     lv11                         dequantize                 (64)                 float32  -                      +3 const
+ 13  OP     lv12                         add                        (1,14,14,64)         float32  -                      lv10, lv11
+ 14  OP     lv13                         quantize                   (1,14,14,64)         int8     -                      lv12  (+2 const)
+ 15  OP     lv14                         clip                       (1,14,14,64)         int8     -                      lv13  (+2 const)
+ 16  OP     lv15                         max_pool2d                 (1,7,7,64)           int8     -                      lv14
+ 17  OP     lv16                         reshape                    (1,3136)             int8     -                      lv15
+ 18  OP     lv17                         dequantize                 (1,3136)             float32  -                      lv16  (+2 const)
+ 19  OP     lv18                         permute_dims               (3136,128)           int8     -                      +1 const
+ 20  OP     lv19                         dequantize                 (3136,128)           float32  -                      lv18  (+2 const)
+ 21  OP     lv20                         matmul                     (1,128)              float32  -                      lv17, lv19
+ 22  OP     lv21                         dequantize                 (128)                float32  -                      +3 const
+ 23  OP     lv22                         add                        (1,128)              float32  -                      lv20, lv21
+ 24  OP     lv23                         quantize                   (1,128)              int8     -                      lv22  (+2 const)
+ 25  OP     lv24                         clip                       (1,128)              int8     -                      lv23  (+2 const)
+ 26  OP     lv25                         dequantize                 (1,128)              float32  -                      lv24  (+2 const)
+ 27  OP     lv26                         permute_dims               (128,10)             int8     -                      +1 const
+ 28  OP     lv27                         dequantize                 (128,10)             float32  -                      lv26  (+2 const)
+ 29  OP     lv28                         matmul                     (1,10)               float32  -                      lv25, lv27
+ 30  OP     lv29                         dequantize                 (10)                 float32  -                      +3 const
+ 31  OP     lv30                         add                        (1,10)               float32  -                      lv28, lv29
+ 32  OP     lv31                         quantize                   (1,10)               int8     -                      lv30  (+2 const)
+ 33  OP     lv32                         dequantize                 (1,10)               float32  -                      lv31  (+2 const)
+ 34  OP     lv33                         softmax                    (1,10)               float32  -                      lv32
+ 35  OP     gv                           quantize                   (1,10)               int8     -                      lv33  (+2 const)
+
+OUTPUT: gv
+
+# 依赖边（producer -> consumer）
+serving_default_input_1:0 -> lv
+lv -> lv2
+lv1 -> lv2
+lv2 -> lv4
+lv3 -> lv4
+lv4 -> lv5
+lv5 -> lv6
+lv6 -> lv7
+lv7 -> lv8
+lv8 -> lv10
+lv9 -> lv10
+lv10 -> lv12
+lv11 -> lv12
+lv12 -> lv13
+lv13 -> lv14
+lv14 -> lv15
+lv15 -> lv16
+lv16 -> lv17
+lv18 -> lv19
+lv17 -> lv20
+lv19 -> lv20
+lv20 -> lv22
+lv21 -> lv22
+lv22 -> lv23
+lv23 -> lv24
+lv24 -> lv25
+lv26 -> lv27
+lv25 -> lv28
+lv27 -> lv28
+lv28 -> lv30
+lv29 -> lv30
+lv30 -> lv31
+lv31 -> lv32
+lv32 -> lv33
+lv33 -> gv
+
+# 统计: 节点 36（INPUT 1, OP 35, FUSED 0, OTHER 0），边 35 条

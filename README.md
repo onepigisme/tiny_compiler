@@ -9,6 +9,7 @@
 - **单函数推理**：生成单一 `forward()` 函数，采用**双工作张量乒乓交换**（`ta`/`tb`），按层奇偶性选择读写，内存占用最小化
 - **Dropout 零拷贝传递**：推理阶段 Dropout 无操作，通过交换 `k2c_tensor` 结构体（指针+元数据）传递数据
 - **same padding 支持**：`k2c_conv2d` 不接收 padding，自动插入 `k2c_pad2d` 预处理
+- **TFLite → Relax → C 编译**：以 TVM Relax 为前端解析 TFLite，跑图优化 Pass（常量折叠 / 死代码消除 / DPL 算子融合），做 Kahn 拓扑调度 + 生存期分析 + offset 级单池 arena 内存规划，导出可编译可运行的 C 推理代码，并与 TFLite golden 数值对拍
 - **PyQt5 图形界面**：可视化选择模型文件并触发转换
 - **C++17 推理框架参考实现**：以 NCNN/MNN 同款的工厂自注册模式实现算子注册表，含虚函数算子体系、双缓冲乒乓 Graph 与完整算子计算，可直接编译运行
 - **完整 keras2c 运行时**：内置 `networkop/` 下的 C 推理算子（Conv2D、Dense、MaxPooling、激活函数等）
@@ -35,6 +36,69 @@ Keras H5 模型
       ▼
  networkop/ (keras2c 运行时)  C 编译器 → MCU 可执行推理程序
 ```
+
+## TFLite → Relax → C 编译流程（TVM 前端）
+
+以 TVM Relax 为图 IR 的第二条编译管线（`tvm` conda 环境，TVM ≥ 0.27）：
+
+```
+TFLite 模型 (float32)
+      │
+      ▼
+ tools/dump_relax_ir.py       前端解析 from_tflite → Relax IRModule
+      │                       图优化 Pass：FoldConstant + DeadCodeElimination
+      │                       + FuseOpsByPattern（conv2d/matmul + bias + relu 融合）
+      │                       拓扑提取 → Kahn 执行序 → 生存期分析
+      ▼
+ tools/codegen_tflite_c.py    offset 级单池 arena 内存规划（区间 first-fit + 8B 对齐）
+      │                       权重提取 → weights.h/c；算子映射 → model.h/c + main.c
+      │                       （pad workspace 作为伪变量一并纳入 arena 规划）
+      ▼
+ model/<stem>_c/              生成的 C 推理工程 + networkop 运行时拷贝
+      │
+      ▼
+ zig cc（或任意 C 编译器）     forward.exe：读 input.bin → forward() → 写 output.bin
+      │
+      ▼
+ tools/gen_golden.py          tf.lite.Interpreter 生成 golden，与 C 输出对拍
+```
+
+```bash
+# —— 第一步：导出 C 代码（只需要 tvm 环境，不需要任何 C 编译器）——
+conda activate tvm
+python tools/codegen_tflite_c.py model/mnist_cnn.tflite --plan-only   # 只看 arena 布局
+python tools/codegen_tflite_c.py model/mnist_cnn.tflite               # 生成 model/*_c/ 下的 .c/.h
+
+# —— 第二步（可选）：PC 上数值验证，任意 C 编译器均可，不属于交付产物 ——
+pip install ziglang                                    # 本机无 gcc/cl 时用 zig cc
+python -m ziglang cc -O2 -Imodel/mnist_cnn_c/networkop \
+    model/mnist_cnn_c/*.c model/mnist_cnn_c/networkop/*.c \
+    -o model/mnist_cnn_c/forward.exe -lm
+conda activate tiny_ml
+python tools/gen_golden.py model/mnist_cnn.tflite      # 生成 input.bin/golden.npy
+model\mnist_cnn_c\forward.exe model\mnist_cnn_c\input.bin model\mnist_cnn_c\output.bin
+python tools/gen_golden.py model/mnist_cnn.tflite      # 重跑完成对拍（PASS, max|diff|~1e-7）
+```
+
+**MCU 集成**：生成的 C 是纯 C99、无 malloc、无 OS 依赖的静态 arena 工程。把
+`model.c`、`weights.c` 和 `networkop/` 下所需 `k2c_*.c` 加入目标芯片的工具链工程
+（Cortex-M 用 arm-none-eabi-gcc / Keil / IAR；TC3xx 用 AURIX Studio / TASKING），
+include 路径指向 `networkop/` 即可。不编译 PC 验证用的 `main.c`，固件侧自行实现入口：
+
+```c
+#include "model.h"
+static float in[IN_SIZE];    /* 784 */
+static float out[OUT_SIZE];  /* 10  */
+forward(in, out);            /* 仅一个调用，结果在 out[] */
+```
+
+关键实现约定（详见 `tools/codegen_tflite_c.py` 文件头）：
+- k2c 图像张量是 **HWC 三维**（无 batch 维），dense 是 `(batch, features)` 二维；
+- Relax 前端已把 TFLite 的 OHWI 卷积权重 permute 成 **HWIO** 并被常量折叠，导出时直接使用；
+- `k2c_pad2d` 的 pad 顺序是 `{top, bottom, left, right}`，与 Relax 的 `(top, left, bottom, right)` 需要重排；
+- MNIST float 模型 arena 仅 **125440 B**（31360 floats），所有中间张量按生存期错位共享单池。
+
+当前限制：仅支持 float32 图；int8 全量化模型的 QDQ 算子需要先做量化 legalization pass 才能映射到 k2c。
 
 ## 目录结构
 
@@ -78,9 +142,18 @@ tiny_ml_compiler/
 │   ├── mnist_cnn.tflite       # float32 TFLite
 │   ├── mnist_cnn_quant.tflite # 动态范围量化 TFLite
 │   ├── mnist_cnn_int8.tflite  # int8 全整数量化 TFLite
-│   └── weights/               # 编译生成的 C 文件（weight.* 可重新生成）
+│   ├── mnist_cnn_c/           # TFLite→Relax→C 管线的导出产物（纯 C 源码，可重新生成）
+│   │   ├── weights.h / weights.c     # 权重 k2c_tensor（只读段）
+│   │   ├── model.h / model.c         # arena + forward()（offset 级内存规划）
+│   │   ├── main.c                    # PC 验证入口（MCU 集成时不编译）
+│   │   └── networkop/                # keras2c 纯 C99 运行时拷贝
+│   └── weights/               # H5 编译生成的 C 文件（weight.* 可重新生成）
 │       ├── model.h / model.c        # 各层超参数
 │       └── model_invoke.c           # 统一 forward() 推理函数
+├── tools/                  # TVM Relax 实验管线（tvm conda 环境）
+│   ├── dump_relax_ir.py    #   TFLite→Relax 前端 / 图优化 Pass / 拓扑 / 调度
+│   ├── codegen_tflite_c.py #   arena 内存规划 + k2c 算子映射 → C 代码导出
+│   └── gen_golden.py       #   TFLite golden 生成与 C 输出对拍
 ├── tests/                  # pytest 测试
 └── pyproject.toml
 ```

@@ -1,0 +1,53 @@
+# from tvm.script import ir as I
+# from tvm.script import relax as R
+
+@I.ir_module
+class Module:
+    @R.function(private=True)
+    def fused_relax_matmul_relax_add_relax_nn_relu(lv8: R.Tensor((1, 3136), dtype="float32")) -> R.Tensor((1, 128), dtype="float32"):
+        R.func_attr({"Composite": "fused_matmul_bias_relu", "Primitive": True})
+        with R.dataflow():
+            lv10: R.Tensor((1, 128), dtype="float32") = R.matmul(lv8, metadata["ir.GenericConst"][0], out_dtype=None)
+            lv11: R.Tensor((1, 128), dtype="float32") = R.add(lv10, metadata["ir.GenericConst"][1])
+            gv: R.Tensor((1, 128), dtype="float32") = R.nn.relu(lv11)
+            R.output(gv)
+        return gv
+
+    @R.function(private=True)
+    def fused_relax_nn_conv2d_relax_add_relax_nn_relu(serving_default_input_1_0: R.Tensor((1, 28, 28, 1), dtype="float32")) -> R.Tensor((1, 28, 28, 32), dtype="float32"):
+        R.func_attr({"Composite": "fused_conv2d_bias_relu", "Primitive": True})
+        with R.dataflow():
+            lv: R.Tensor((1, 28, 28, 32), dtype="float32") = R.nn.conv2d(serving_default_input_1_0, metadata["ir.GenericConst"][2], strides=[1, 1], padding=[1, 1, 1, 1], dilation=[1, 1], groups=1, data_layout="NHWC", kernel_layout="HWIO", out_layout="NHWC", out_dtype=None)
+            lv1: R.Tensor((1, 28, 28, 32), dtype="float32") = R.add(lv, metadata["ir.GenericConst"][3])
+            gv: R.Tensor((1, 28, 28, 32), dtype="float32") = R.nn.relu(lv1)
+            R.output(gv)
+        return gv
+
+    @R.function(private=True)
+    def fused_relax_nn_conv2d_relax_add_relax_nn_relu1(lv3: R.Tensor((1, 14, 14, 32), dtype="float32")) -> R.Tensor((1, 14, 14, 64), dtype="float32"):
+        R.func_attr({"Composite": "fused_conv2d_bias_relu", "Primitive": True})
+        with R.dataflow():
+            lv4: R.Tensor((1, 14, 14, 64), dtype="float32") = R.nn.conv2d(lv3, metadata["ir.GenericConst"][4], strides=[1, 1], padding=[1, 1, 1, 1], dilation=[1, 1], groups=1, data_layout="NHWC", kernel_layout="HWIO", out_layout="NHWC", out_dtype=None)
+            lv5: R.Tensor((1, 14, 14, 64), dtype="float32") = R.add(lv4, metadata["ir.GenericConst"][5])
+            gv: R.Tensor((1, 14, 14, 64), dtype="float32") = R.nn.relu(lv5)
+            R.output(gv)
+        return gv
+
+    @R.function
+    def main(serving_default_input_1_0: R.Tensor((1, 28, 28, 1), dtype="float32")) -> R.Tensor((1, 10), dtype="float32"):
+        R.func_attr({"num_input": 1, "params": [metadata["ffi.Tensor"][0], metadata["ffi.Tensor"][1], metadata["ffi.Tensor"][2], metadata["ffi.Tensor"][3], metadata["ffi.Tensor"][4], metadata["ffi.Tensor"][5], metadata["ffi.Tensor"][6], metadata["ffi.Tensor"][7]]})
+        cls = Module
+        with R.dataflow():
+            lv: R.Tensor((1, 28, 28, 32), dtype="float32") = cls.fused_relax_nn_conv2d_relax_add_relax_nn_relu(serving_default_input_1_0)
+            lv3: R.Tensor((1, 14, 14, 32), dtype="float32") = R.nn.max_pool2d(lv, pool_size=[2, 2], strides=[2, 2], dilation=[1, 1], padding=[0, 0, 0, 0], ceil_mode=False, count_include_pad=False, layout="NHWC", out_layout="NHWC")
+            lv1: R.Tensor((1, 14, 14, 64), dtype="float32") = cls.fused_relax_nn_conv2d_relax_add_relax_nn_relu1(lv3)
+            lv7: R.Tensor((1, 7, 7, 64), dtype="float32") = R.nn.max_pool2d(lv1, pool_size=[2, 2], strides=[2, 2], dilation=[1, 1], padding=[0, 0, 0, 0], ceil_mode=False, count_include_pad=False, layout="NHWC", out_layout="NHWC")
+            lv8: R.Tensor((1, 3136), dtype="float32") = R.reshape(lv7, R.shape([1, 3136]))
+            lv_1: R.Tensor((1, 128), dtype="float32") = cls.fused_relax_matmul_relax_add_relax_nn_relu(lv8)
+            lv14: R.Tensor((1, 10), dtype="float32") = R.matmul(lv_1, metadata["ir.GenericConst"][6], out_dtype=None)
+            lv15: R.Tensor((1, 10), dtype="float32") = R.add(lv14, metadata["ir.GenericConst"][7])
+            gv: R.Tensor((1, 10), dtype="float32") = R.nn.softmax(lv15, axis=-1)
+            R.output(gv)
+        return gv
+
+# Metadata omitted. Use show_meta=True in script() method to show it.

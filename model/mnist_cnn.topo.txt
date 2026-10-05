@@ -1,0 +1,45 @@
+# 前端拓扑（逐算子，binding 顺序即拓扑序）
+
+idx  KIND   NAME                         OP                         SHAPE                DTYPE    INNER                  INPUTS
+-------------------------------------------------------------------------------------------------------------------------------
+  0  INPUT  serving_default_input_1:0    -                          (1,28,28,1)          float32  -                      -
+  1  OP     lv                           conv2d                     (1,28,28,32)         float32  -                      serving_default_input_1:0  (+1 const)
+  2  OP     lv1                          add                        (1,28,28,32)         float32  -                      lv  (+1 const)
+  3  OP     lv2                          relu                       (1,28,28,32)         float32  -                      lv1
+  4  OP     lv3                          max_pool2d                 (1,14,14,32)         float32  -                      lv2
+  5  OP     lv4                          conv2d                     (1,14,14,64)         float32  -                      lv3  (+1 const)
+  6  OP     lv5                          add                        (1,14,14,64)         float32  -                      lv4  (+1 const)
+  7  OP     lv6                          relu                       (1,14,14,64)         float32  -                      lv5
+  8  OP     lv7                          max_pool2d                 (1,7,7,64)           float32  -                      lv6
+  9  OP     lv8                          reshape                    (1,3136)             float32  -                      lv7
+ 10  OP     lv9                          permute_dims               (3136,128)           float32  -                      +1 const
+ 11  OP     lv10                         matmul                     (1,128)              float32  -                      lv8, lv9
+ 12  OP     lv11                         add                        (1,128)              float32  -                      lv10  (+1 const)
+ 13  OP     lv12                         relu                       (1,128)              float32  -                      lv11
+ 14  OP     lv13                         permute_dims               (128,10)             float32  -                      +1 const
+ 15  OP     lv14                         matmul                     (1,10)               float32  -                      lv12, lv13
+ 16  OP     lv15                         add                        (1,10)               float32  -                      lv14  (+1 const)
+ 17  OP     gv                           softmax                    (1,10)               float32  -                      lv15
+
+OUTPUT: gv
+
+# 依赖边（producer -> consumer）
+serving_default_input_1:0 -> lv
+lv -> lv1
+lv1 -> lv2
+lv2 -> lv3
+lv3 -> lv4
+lv4 -> lv5
+lv5 -> lv6
+lv6 -> lv7
+lv7 -> lv8
+lv8 -> lv10
+lv9 -> lv10
+lv10 -> lv11
+lv11 -> lv12
+lv12 -> lv14
+lv13 -> lv14
+lv14 -> lv15
+lv15 -> gv
+
+# 统计: 节点 18（INPUT 1, OP 17, FUSED 0, OTHER 0），边 17 条

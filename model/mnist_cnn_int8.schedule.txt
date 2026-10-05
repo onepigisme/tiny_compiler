@@ -1,0 +1,40 @@
+# 拓扑调度（Pass 后可执行图）
+
+执行序(Kahn): 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25
+（与 IR binding 序一致：图无独立就绪分支，串行链）
+
+step  KIND   NODE                     OP                       READ(buf)                  WRITE(buf)           LIVE_BYTES
+-------------------------------------------------------------------------------------------------------------------------
+   0  INPUT  serving_default_input_1:0 -                        -                          serving_default_input_1:0@b0       784 B
+   1  OP     lv                       dequantize               serving_default_input_1:0@b0 lv@b1                     3920 B
+   2  OP     lv2                      conv2d                   lv@b1                      lv2@b0                  103488 B
+   3  OP     lv4                      add                      lv2@b0                     lv4@b1                  200704 B
+   4  OP     lv5                      quantize                 lv4@b1                     lv5@b0                  125440 B
+   5  OP     lv6                      clip                     lv5@b0                     lv6@b1                   50176 B
+   6  OP     lv7                      max_pool2d               lv6@b1                     lv7@b0                   31360 B
+   7  OP     lv8                      dequantize               lv7@b0                     lv8@b1                   31360 B
+   8  OP     lv10                     conv2d                   lv8@b1                     lv10@b0                  75264 B
+   9  OP     lv12                     add                      lv10@b0                    lv12@b1                 100352 B
+  10  OP     lv13                     quantize                 lv12@b1                    lv13@b0                  62720 B
+  11  OP     lv14                     clip                     lv13@b0                    lv14@b1                  25088 B
+  12  OP     lv15                     max_pool2d               lv14@b1                    lv15@b0                  15680 B
+  13  OP     lv16                     reshape                  lv15@b0                    lv16@b1                   6272 B
+  14  OP     lv17                     dequantize               lv16@b1                    lv17@b0                  15680 B
+  15  OP     lv20                     matmul                   lv17@b0                    lv20@b1                  13056 B
+  16  OP     lv22                     add                      lv20@b1                    lv22@b0                   1024 B
+  17  OP     lv23                     quantize                 lv22@b0                    lv23@b1                    640 B
+  18  OP     lv24                     clip                     lv23@b1                    lv24@b0                    256 B
+  19  OP     lv25                     dequantize               lv24@b0                    lv25@b1                    640 B
+  20  OP     lv28                     matmul                   lv25@b1                    lv28@b0                    552 B
+  21  OP     lv30                     add                      lv28@b0                    lv30@b1                     80 B
+  22  OP     lv31                     quantize                 lv30@b1                    lv31@b0                     50 B
+  23  OP     lv32                     dequantize               lv31@b0                    lv32@b1                     50 B
+  24  OP     lv33                     softmax                  lv32@b1                    lv33@b0                     80 B
+  25  OP     gv                       quantize                 lv33@b0                    gv@b1                       50 B
+
+# 内存块复用表（同块内活跃区间两两不交 -> 轮流复用同一 buffer）
+  buf#0    100352 B : serving_default_input_1:0[0..1], lv2[2..3], lv5[4..5], lv7[6..7], lv10[8..9], lv13[10..11], lv15[12..13], lv17[14..15], lv22[16..17], lv24[18..19], lv28[20..21], lv31[22..23], lv33[24..25]
+  buf#1    100352 B : lv[1..2], lv4[3..4], lv6[5..6], lv8[7..8], lv12[9..10], lv14[11..12], lv16[13..14], lv20[15..16], lv23[17..18], lv25[19..20], lv30[21..22], lv32[23..24], gv[25..25]
+
+# 内存对比: 复用后 arena 200704 B vs 无复用 432388 B -> 节省 54%
+# 峰值(按生存期分配、不复用) 200704 B；常量张量共 0 B（部署时可放只读段，不必占 workspace）

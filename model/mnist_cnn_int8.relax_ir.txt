@@ -1,0 +1,50 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+# from tvm.tirx.layout import Axis
+# from tvm.script import relax as R
+
+@I.ir_module
+class Module:
+    @R.function
+    def main(serving_default_input_1_0: R.Tensor((1, 28, 28, 1), dtype="int8")) -> R.Tensor((1, 10), dtype="int8"):
+        R.func_attr({"num_input": 1, "params": [metadata["ffi.Tensor"][0], metadata["ffi.Tensor"][1], metadata["ffi.Tensor"][2], metadata["ffi.Tensor"][3], metadata["ffi.Tensor"][4], metadata["ffi.Tensor"][5], metadata["ffi.Tensor"][6], metadata["ffi.Tensor"][7]]})
+        with R.dataflow():
+            lv: R.Tensor((1, 28, 28, 1), dtype="float32") = R.dequantize(serving_default_input_1_0, R.const(0.0039215688593685627, "float32"), R.const(-128, "int32"), out_dtype="float32", axis=0)
+            lv1: R.Tensor((3, 3, 1, 32), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][0], metadata["ir.GenericConst"][1], R.const(0, "int32"), out_dtype="float32", axis=3)
+            lv2: R.Tensor((1, 28, 28, 32), dtype="float32") = R.nn.conv2d(lv, lv1, strides=[1, 1], padding=[1, 1, 1, 1], dilation=[1, 1], groups=1, data_layout="NHWC", kernel_layout="HWIO", out_layout="NHWC", out_dtype=None)
+            lv3: R.Tensor((32,), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][2], metadata["ir.GenericConst"][3], R.const(0, "int32"), out_dtype="float32", axis=0)
+            lv4: R.Tensor((1, 28, 28, 32), dtype="float32") = R.add(lv2, lv3)
+            lv5: R.Tensor((1, 28, 28, 32), dtype="int8") = R.quantize(lv4, R.const(0.0041284100152552128, "float32"), R.const(-128, "int32"), out_dtype="int8", axis=0)
+            lv6: R.Tensor((1, 28, 28, 32), dtype="int8") = R.clip(lv5, T.float64(-128.0), T.float64(127.0))
+            lv7: R.Tensor((1, 14, 14, 32), dtype="int8") = R.nn.max_pool2d(lv6, pool_size=[2, 2], strides=[2, 2], dilation=[1, 1], padding=[0, 0, 0, 0], ceil_mode=False, count_include_pad=False, layout="NHWC", out_layout="NHWC")
+            lv8: R.Tensor((1, 14, 14, 32), dtype="float32") = R.dequantize(lv7, R.const(0.0041284100152552128, "float32"), R.const(-128, "int32"), out_dtype="float32", axis=0)
+            lv9: R.Tensor((3, 3, 32, 64), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][4], metadata["ir.GenericConst"][5], R.const(0, "int32"), out_dtype="float32", axis=3)
+            lv10: R.Tensor((1, 14, 14, 64), dtype="float32") = R.nn.conv2d(lv8, lv9, strides=[1, 1], padding=[1, 1, 1, 1], dilation=[1, 1], groups=1, data_layout="NHWC", kernel_layout="HWIO", out_layout="NHWC", out_dtype=None)
+            lv11: R.Tensor((64,), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][6], metadata["ir.GenericConst"][7], R.const(0, "int32"), out_dtype="float32", axis=0)
+            lv12: R.Tensor((1, 14, 14, 64), dtype="float32") = R.add(lv10, lv11)
+            lv13: R.Tensor((1, 14, 14, 64), dtype="int8") = R.quantize(lv12, R.const(0.011567183770239353, "float32"), R.const(-128, "int32"), out_dtype="int8", axis=0)
+            lv14: R.Tensor((1, 14, 14, 64), dtype="int8") = R.clip(lv13, T.float64(-128.0), T.float64(127.0))
+            lv15: R.Tensor((1, 7, 7, 64), dtype="int8") = R.nn.max_pool2d(lv14, pool_size=[2, 2], strides=[2, 2], dilation=[1, 1], padding=[0, 0, 0, 0], ceil_mode=False, count_include_pad=False, layout="NHWC", out_layout="NHWC")
+            lv16: R.Tensor((1, 3136), dtype="int8") = R.reshape(lv15, R.shape([1, 3136]))
+            lv17: R.Tensor((1, 3136), dtype="float32") = R.dequantize(lv16, R.const(0.011567183770239353, "float32"), R.const(-128, "int32"), out_dtype="float32", axis=0)
+            lv18: R.Tensor((3136, 128), dtype="int8") = R.permute_dims(metadata["ir.GenericConst"][8], axes=[1, 0])
+            lv19: R.Tensor((3136, 128), dtype="float32") = R.dequantize(lv18, R.const(0.0025969063863158226, "float32"), R.const(0, "int32"), out_dtype="float32", axis=1)
+            lv20: R.Tensor((1, 128), dtype="float32") = R.matmul(lv17, lv19, out_dtype=None)
+            lv21: R.Tensor((128,), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][9], R.const(3.0038892873562872e-05, "float32"), R.const(0, "int32"), out_dtype="float32", axis=0)
+            lv22: R.Tensor((1, 128), dtype="float32") = R.add(lv20, lv21)
+            lv23: R.Tensor((1, 128), dtype="int8") = R.quantize(lv22, R.const(0.042118754237890244, "float32"), R.const(-128, "int32"), out_dtype="int8", axis=0)
+            lv24: R.Tensor((1, 128), dtype="int8") = R.clip(lv23, T.float64(-128.0), T.float64(127.0))
+            lv25: R.Tensor((1, 128), dtype="float32") = R.dequantize(lv24, R.const(0.042118754237890244, "float32"), R.const(-128, "int32"), out_dtype="float32", axis=0)
+            lv26: R.Tensor((128, 10), dtype="int8") = R.permute_dims(metadata["ir.GenericConst"][10], axes=[1, 0])
+            lv27: R.Tensor((128, 10), dtype="float32") = R.dequantize(lv26, R.const(0.0030308184213936329, "float32"), R.const(0, "int32"), out_dtype="float32", axis=1)
+            lv28: R.Tensor((1, 10), dtype="float32") = R.matmul(lv25, lv27, out_dtype=None)
+            lv29: R.Tensor((10,), dtype="float32") = R.dequantize(metadata["ir.GenericConst"][11], R.const(0.00012765428982675076, "float32"), R.const(0, "int32"), out_dtype="float32", axis=0)
+            lv30: R.Tensor((1, 10), dtype="float32") = R.add(lv28, lv29)
+            lv31: R.Tensor((1, 10), dtype="int8") = R.quantize(lv30, R.const(0.15180924534797668, "float32"), R.const(-20, "int32"), out_dtype="int8", axis=0)
+            lv32: R.Tensor((1, 10), dtype="float32") = R.dequantize(lv31, R.const(0.15180924534797668, "float32"), R.const(-20, "int32"), out_dtype="float32", axis=0)
+            lv33: R.Tensor((1, 10), dtype="float32") = R.nn.softmax(lv32, axis=-1)
+            gv: R.Tensor((1, 10), dtype="int8") = R.quantize(lv33, R.const(0.00390625, "float32"), R.const(-128, "int32"), out_dtype="int8", axis=0)
+            R.output(gv)
+        return gv
+
+# Metadata omitted. Use show_meta=True in script() method to show it.

@@ -1,0 +1,24 @@
+# 拓扑调度（Pass 后可执行图）
+
+执行序(Kahn): 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+（与 IR binding 序一致：图无独立就绪分支，串行链）
+
+step  KIND   NODE                     OP                       READ(buf)                  WRITE(buf)           LIVE_BYTES
+-------------------------------------------------------------------------------------------------------------------------
+   0  INPUT  serving_default_input_1:0 -                        -                          serving_default_input_1:0@b0      3136 B
+   1  FUSED  lv                       fused_conv2d_bias_relu   serving_default_input_1:0@b0 lv@b1                   103488 B
+   2  OP     lv3                      max_pool2d               lv@b1                      lv3@b0                  125440 B
+   3  FUSED  lv1                      fused_conv2d_bias_relu   lv3@b0                     lv1@b1                   75264 B
+   4  OP     lv7                      max_pool2d               lv1@b1                     lv7@b0                   62720 B
+   5  OP     lv8                      reshape                  lv7@b0                     lv8@b1                   25088 B
+   6  FUSED  lv#2                     fused_matmul_bias_relu   lv8@b1                     lv#2@b0                  13056 B
+   7  OP     lv14                     matmul                   lv#2@b0                    lv14@b1                    552 B
+   8  OP     lv15                     add                      lv14@b1                    lv15@b0                     80 B
+   9  OP     gv                       softmax                  lv15@b0                    gv@b1                       80 B
+
+# 内存块复用表（同块内活跃区间两两不交 -> 轮流复用同一 buffer）
+  buf#0     25088 B : serving_default_input_1:0[0..1], lv3[2..3], lv7[4..5], lv#2[6..7], lv15[8..9]
+  buf#1    100352 B : lv[1..2], lv1[3..4], lv8[5..6], lv14[7..8], gv[9..9]
+
+# 内存对比: 复用后 arena 125440 B vs 无复用 204472 B -> 节省 39%
+# 峰值(按生存期分配、不复用) 125440 B；常量张量共 0 B（部署时可放只读段，不必占 workspace）
